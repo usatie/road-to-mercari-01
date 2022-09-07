@@ -1,0 +1,7 @@
+*
+!*/**
+!.gitignore
+!imgconv
+!go.mod
+!main.go
+!testdata
