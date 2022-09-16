@@ -27,6 +27,6 @@ import (
 
 // Convert images in a directory from some format to another.
 func main() {
-	app := &imgconv.App{OutStream: os.Stdout, ErrStream: os.Stderr}
+	app := &imgconv.App{Input: os.Stdin, Output: os.Stdout, ErrOutput: os.Stderr}
 	os.Exit(app.Run(os.Args))
 }

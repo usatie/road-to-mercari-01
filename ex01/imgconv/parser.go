@@ -4,7 +4,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 )
 
@@ -16,7 +15,6 @@ type cliArgument struct {
 	quality  int
 	dir      string
 	verbose  bool
-	decoder  Decoder
 	encoder  Encoder
 }
 
@@ -25,28 +23,28 @@ func (c cliArgument) String() string {
 }
 
 const usageOptions = `options:
-  -i, --input <extension>    input file extension <png, jpeg, jpg, gif>
-  -o, --output <extension>   output file extension <png, jpeg, jpg, gif>
+  -i, --input <extension>    input file format <png, jpeg, gif>
+  -o, --output <extension>   output file format <png, jpeg, gif>
   -d, --dir <directory>      destination directory for output files
   -q, --quality <quality>    output encoding quality. higher is better. <1-100>
   -v, --verbose              verbose output`
 
 // parseFlags parse the arguments and writes errors to errStream
-func parseFlags(errStream io.Writer, args []string) (cliArgument, error) {
+func (a *App) parseFlags(args []string) (cliArgument, error) {
 	var arg cliArgument
 	// Custom flag set to set custom output and usage
 	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	fs.SetOutput(errStream)
+	fs.SetOutput(a.ErrOutput)
 	fs.Usage = func() {
-		fmt.Fprintf(errStream, "Usage: %s [options] image_dir\n", args[0])
-		fmt.Fprintln(errStream, usageOptions)
+		fmt.Fprintf(a.ErrOutput, "Usage: %s [options] image_dir\n", args[0])
+		fmt.Fprintln(a.ErrOutput, usageOptions)
 	}
 	// -i, --input
-	fs.StringVar(&arg.inExt, "i", "jpg", "input file extension <png, jpeg, jpg, gif>")
-	fs.StringVar(&arg.inExt, "input", "jpg", "input file extension <png, jpeg, jpg, gif>")
+	fs.StringVar(&arg.inExt, "i", "jpeg", "input file format <png, jpeg, gif>")
+	fs.StringVar(&arg.inExt, "input", "jpeg", "input file format <png, jpeg, gif>")
 	// -o, --output
-	fs.StringVar(&arg.outExt, "o", "png", "output file extension <png, jpeg, jpg, gif>")
-	fs.StringVar(&arg.outExt, "output", "png", "output file extension <png, jpeg, jpg, gif>")
+	fs.StringVar(&arg.outExt, "o", "png", "output file format <png, jpeg, gif>")
+	fs.StringVar(&arg.outExt, "output", "png", "output file format <png, jpeg, gif>")
 	// -d, --dir
 	fs.StringVar(&arg.dir, "d", "", "destination directory for output files")
 	fs.StringVar(&arg.dir, "dir", "", "destination directory for output files")
@@ -60,46 +58,57 @@ func parseFlags(errStream io.Writer, args []string) (cliArgument, error) {
 	if err := fs.Parse(args[1:]); err != nil {
 		return arg, errors.New("Parse Error")
 	}
-	// rootPath must be passed
+	// rootPath
 	arg.rootPath = fs.Arg(0)
+	// rootPath must be passed
 	if arg.rootPath == "" {
-		fmt.Fprintln(errStream, "error: invalid argument")
+		fmt.Fprintln(a.ErrOutput, "error: invalid argument")
 		return arg, errors.New("rootPath is empty")
 	}
 	// rootPath must exist
 	if _, err := os.Stat(arg.rootPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			fmt.Fprintf(errStream, "error: %s: no such file or directory\n", arg.rootPath)
+			fmt.Fprintf(a.ErrOutput, "error: %s: no such file or directory\n", arg.rootPath)
 		} else {
-			fmt.Fprintf(errStream, "error: %v\n", err)
+			fmt.Fprintf(a.ErrOutput, "error: %v\n", err)
 		}
 		return arg, err
+	}
+	// inExt
+	switch arg.inExt {
+	case "png", "jpeg", "gif":
+		// ok
+	default:
+		fmt.Fprintln(a.ErrOutput, "Invalid input format.")
+		return arg, errors.New("Invalid input format.")
+	}
+	// outExt
+	switch arg.outExt {
+	case "png", "jpeg", "gif":
+		// ok
+	default:
+		fmt.Fprintln(a.ErrOutput, "Invalid input format.")
+		return arg, errors.New("Invalid input format.")
 	}
 	// dir must be directory
 	if arg.dir != "" {
 		info, err := os.Stat(arg.dir)
 		if err != nil {
-			fmt.Fprintf(errStream, "error: %v\n", err)
+			fmt.Fprintf(a.ErrOutput, "error: %v\n", err)
 			return arg, err
 		}
 		if !info.IsDir() {
 			err = errors.New(fmt.Sprintf("%s is not a directory.", arg.dir))
-			fmt.Fprintf(errStream, "error: %v\n", err)
+			fmt.Fprintf(a.ErrOutput, "error: %v\n", err)
 			return arg, err
 		}
 	}
-	// Decoder
-	var err error
-	arg.decoder, err = newDecoder(arg.inExt)
-	if err != nil {
-		fmt.Fprintf(errStream, "error: %v\n", err)
-		return arg, err
-	}
 	// Encoder
-	arg.encoder, err = newEncoder(arg.outExt, arg.quality)
+	encoder, err := newEncoder(arg.outExt, arg.quality)
 	if err != nil {
-		fmt.Fprintf(errStream, "error: %v\n", err)
+		fmt.Fprintf(a.ErrOutput, "error: %v\n", err)
 		return arg, err
 	}
+	arg.encoder = encoder
 	return arg, nil
 }
